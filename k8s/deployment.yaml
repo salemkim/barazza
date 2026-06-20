@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: baraza-app
+  namespace: baraza-prod
+  labels:
+    app: baraza
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: baraza
+  template:
+    metadata:
+      labels:
+        app: baraza
+        version: v1
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - baraza
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: baraza
+          image: {ACCOUNT_ID}.dkr.ap-southeast-1.huaweicloud.com/baraza/app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NODE_ENV
+            - name: NEXT_PUBLIC_APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_APP_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_URL
+            - name: OBS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: OBS_REGION
+            - name: OBS_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: OBS_BUCKET
+            - name: OBS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: obs-credentials
+                  key: OBS_ACCESS_KEY
+            - name: OBS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: obs-credentials
+                  key: OBS_SECRET_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: JWT_SECRET
+            - name: AT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: AT_API_KEY
+            - name: AT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: AT_USERNAME
+            - name: MPESA_CONSUMER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MPESA_CONSUMER_KEY
+            - name: MPESA_CONSUMER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MPESA_CONSUMER_SECRET
+            - name: MPESA_PASSKEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: MPESA_PASSKEY
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+      imagePullSecrets:
+        - name: swr-auth
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: baraza-app-service
+  namespace: baraza-prod
+  labels:
+    app: baraza
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: baraza
